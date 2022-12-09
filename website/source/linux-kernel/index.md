@@ -5,32 +5,32 @@ title: Linux Kernel Exploitation
 <div class="balloon_l">
   <div class="faceicon"><img src="img/wolf_normal.png" alt="オオカミくん" ></div>
   <p class="says">
-  この章ではカーネル空間におけるExploit手法、いわゆる権限昇格について勉強します。<br>
-  WindowsのKernel Exploitでも共通のハードウェアセキュリティ機構や権限昇格の手法が登場するから、この章の知識はLinuxに限らず使えるよ。
+  In this chapter, you will learn about Exploit techniques in the kernel space, so-called privilege escalation.
+  Since common hardware security mechanisms and privilege escalation methods also appear in Windows Kernel Exploit, the knowledge in this chapter is useful not only for Linux.
   </p>
 </div>
 
-- 実行環境とデバッグ方法
-  - [カーネルexploitへの導入](introduction/introduction.html)
-  - [gdbによるカーネルのデバッグ](introduction/debugging.html)
-  - [セキュリティ機構](introduction/security.html)
-  - [コンパイルとexploitの転送](introduction/compile-and-transfer.html)
-- カーネルエクスプロイトの基礎（LK01: Holstein）
-  - [Holsteinモジュールの解析と脆弱性の発火](LK01/welcome-to-holstein.html)
-  - [Holstein v1: Stack Overflowの悪用](LK01/stack_overflow.html)
-  - [Holstein v2: Heap Overflowの悪用](LK01/heap_overflow.html)
-  - [Holstein v3: Use-after-Freeの悪用](LK01/use_after_free.html)
-  - [Holstein v4: Race Conditionの悪用](LK01/race_condition.html)
-- カーネル空間特有の攻撃
+- Execution environment and debugging methods
+  - [Introduction to kernel exploit](introduction/introduction.html)
+  - [Debugging the kernel with gdb](introduction/debugging.html)
+  - [Security mechanisms](introduction/security.html)
+  - [Compilation and exploit transfers](introduction/compile-and-transfer.html)
+- Basics of kernel exploits (LK01: Holstein)
+  - [Analyzing the Holstein module and triggering vulnerabilities](LK01/welcome-to-holstein.html)
+  - [Holstein v1: Stack Overflow exploit](LK01/stack_overflow.html)
+  - [Holstein v2: Heap Overflow exploit](LK01/heap_overflow.html)
+  - [Holstein v3: Use-after-Free exploit](LK01/use_after_free.html)
+  - [Holstein v4: Race Condition exploit](LK01/race_condition.html)
+- Kernel Space Specific Attacks
   - [NULL Pointer Dereference (LK02: Angus)](LK02/null_ptr_deref.html)
   - [Double Fetch (LK03: Dexter)](LK03/double_fetch.html)
-  - [userfaultfdの利用 (LK04: Fleckvieh)](LK04/uffd.html)
-  - [FUSEの利用 (LK04: Fleckvieh)](LK04/fuse.html)
-  - [脆弱なmmap実装の悪用 (LK05: Highland) (工事中)](#)
-- eBPFとJITコンパイラ (LK06: Brahman)
-  - [BPFの導入](LK06/ebpf.html)
-  - [検証器とJITコンパイラ](LK06/verifier.html)
-  - [eBPFのバグの悪用](LK06/exploit.html)
+  - [Use of userfaultfd (LK04: Fleckvieh)](LK04/uffd.html)
+  - [Using FUSE (LK04: Fleckvieh)](LK04/fuse.html)
+  - [Exploitation of a weak mmap implementation (LK05: Highland) (under construction)](#)
+- eBPF and the JIT compiler (LK06: Brahman)
+  - [Introduction to BPF](LK06/ebpf.html)
+  - [Verifier and JIT compiler](LK06/verifier.html)
+  - [Exploitation of a bug in eBPF](LK06/exploit.html)
 <!--
 - UEFIアプリケーション（LK07: ???）
 - TrustZoneとTEE（LK08: ???）

@@ -1,5 +1,5 @@
 ---
-title: BPFの導入
+title: Introduction of BPF
 tags:
     - [Linux]
     - [Kernel]
@@ -10,55 +10,55 @@ lang: ja
 pagination: true
 fd: verifier.html
 ---
-LK06(Brahman)では、Linuxカーネルの機能の1つである、eBPFに含まれるJIT（検証器）のバグを攻撃します。この章では、まずBPFという機能と、その使い方について学びます。
+In LK06 (Brahman), we attack a bug in the JIT (verifier) in eBPF, one of the features of the Linux kernel. In this chapter, you will first learn about BPF and how to use it.
 
-<div class="column" title="目次">
+<div class="column" title="TOC">
 <!-- toc --><br>
 </div>
 
 ## BPF
-eBPFについて説明する前に、その前身となるBPFについて説明します。
-BPFは時代とともに利用用途が広がり、拡張が進みました。大幅な変更が入ってからのBPFをeBPF(extended BPF)、それ以前のBPFをcBPF(classic BPF)と区別して表記することもあります。しかし、現在のLinuxでは、内部的にはeBPFのみが利用されているため、本サイトでは明確に区別が必要ないときはeBPF/cBPFをまとめてBPFと呼びます。
+Before describing the eBPF, let me explain its predecessor, the BPF.
+BPF has been extended over time as its usage has expanded. BPF after the major change is called eBPF (extended BPF), and BPF before that is called cBPF (classic BPF). However, since only eBPF is used internally in the current Linux, eBPF/cBPF are collectively called BPF in this site when no clear distinction is necessary.
 
-### BPFとは
-**BPF**(Berkeley Packet Filter)とは、Linuxカーネルが持つ独自のRISC型仮想マシンです。ユーザー空間から渡されたコードをカーネル空間で実行するために用意されています。当然、任意のコードを実行されては危険なので、BPFに存在する命令セットは、演算や条件分岐といった安全な命令がほとんどです。しかし、メモリ書き込みやジャンプなどの、安全性が保証できない命令も含まれているため、バイトコードを受理する際に**検証器**を通します。これにより、（例えば無限ループに陥らないような）安全なプログラムのみ実行できます。
-では、なぜここまでしてユーザー空間からカーネル空間でコードを実行する必要があるのでしょうか。
-BPFは設計当初、パケットフィルタリングを目的に作られました。ユーザーがBPFコードをロードしておくと、通信パケットが発生したタイミングでBPFコードが実行され、フィルタリングに利用できます。現在ではパケットフィルタリング以外にも、実行トレースの取得や、seccompがシステムコールをフィルタする仕組みなどにもBPFが利用されています。
+### What is BPF?
+**BPF** (Berkeley Packet Filter) is a unique RISC-type virtual machine in Linux kernel. It is provided to execute code passed from user space in kernel space. Naturally, it is dangerous to execute arbitrary code, so most of the instruction sets in the BPF are safe instructions such as arithmetic operations and conditional branches. However, it also includes instructions such as memory writes and jumps whose safety cannot be guaranteed, so they are passed through the **verifier** when the bytecode is accepted. This ensures that only safe programs (e.g., those that do not fall into infinite loops) are executed.
+So why do we need to go this far to execute code in kernel space from user space?
+BPF was originally designed for packet filtering. If the user loads the BPF code, the BPF code is executed when a communication packet is generated and can be used for filtering. Nowadays, besides packet filtering, BPF is also used to obtain execution traces and to provide a mechanism for seccomp to filter system calls.
 
-このように、パケットフィルタやseccompなど、さまざまな箇所でBPFが利用されるようになりました。しかし、毎回BPFバイトコードを解釈してエミュレートしていては、実行速度に難があります。そこで、検証器を通過したBPFバイトコードは、**JIT**(Just-in-Time)コンパイラにより、CPUが解釈できる機械語に変換されます。
-JITコンパイラとは、プログラムの実行中など動的に、何かしらのコードをネイティブな機械語に変換してくれる機構を指します。例えばChromeやFirefoxなどのブラウザは、何回も呼び出されるJavaScript関数を見つけたら、それを機械語に変換して、以降は機械語側を実行することで高速化しています。LinuxカーネルのBPFにおいてJITコンパイラが利用されるかはオプション次第ですが、現在のLinuxカーネルでは標準でJITコンパイラが有効化されています。
+Thus, BPF is now used in various places such as packet filtering and seccomp. However, interpreting and emulating BPF bytecode every time is not fast enough. Therefore, the BPF bytecode that has passed through the verifier is converted into a machine language that can be interpreted by the CPU using a **JIT** (Just-in-Time) compiler.
+A JIT compiler is a mechanism that dynamically converts some code to native machine language during program execution. For example, browsers such as Chrome and Firefox, when they find a JavaScript function that is called many times, they convert it to machine language and execute the machine language side from then on to speed up the program. However, the JIT compiler is enabled by default in the current Linux kernel.
 
-整理すると、BPFコードが実行されるまでの流れは次のようになります。
+To summarize, the flow of BPF code execution is as follows.
 
-1. ユーザー空間からbpfシステムコールでBPFバイトコードがカーネル空間に渡される。
-2. バイトコードを実行しても安全かを、検証器が確かめる。
-3. 検証に成功したら、JITコンパイラでCPUに対応した機械語に変換する。
-4. イベントが発生したら、JITコンパイル後の機械語が呼ばれる。
+1. BPF bytecode is passed from user space to kernel space by bpf system call.
+2. The verifier checks whether it is safe to execute the bytecode.
+3. If the verification succeeds, the JIT compiler converts the bytecode to the CPU-compatible machine language.
+4. When an event occurs, the JIT compiled machine language is called.
 
 <center>
-  <img src="img/bpf_load.png" alt="BPFのロード" style="width:640px;">
+  <img src="img/bpf_load_en.jpg" alt="BPFのロード" style="width:640px;">
 </center>
 
-イベントが発生すると、登録したBPF（チェックしたいイベント）の種類によって引数が渡されます。この引数を**コンテキスト**と呼びます。BPFはその引数を処理をして、最終的に1つの返り値を返します。例えばseccompの場合、呼ばれようとしたシステムコールの番号やアーキテクチャの種類などが入った構造体が引数としてBPFプログラムに渡ります。BPFプログラム（seccomp filter）はシステムコール番号などをもとに、システムコールの実行を許可するかなどを判断し、返り値としてカーネルに受け渡します。この返り値を受け取ったカーネルは、システムコールを許可するか、拒否するか、それとも失敗させるかなどを判断できます。
+When an event occurs, an argument is passed depending on the type of BPF (event you want to check) you have registered. This argument is called the **context**, and the BPF processes the argument and finally returns a single return value. For example, in the case of seccomp, a structure containing the number of the system call to be called, the architecture type, etc. is passed to the BPF program as an argument. The BPF program (seccomp filter) decides whether the system call is allowed or not based on the system call number, and passes it to the kernel as a return value. Upon receiving this return value, the kernel can decide whether to allow, deny, or fail the system call.
 
 <div class="balloon_l">
   <div class="faceicon"><img src="../img/wolf_normal.png" alt="オオカミくん" ></div>
   <p class="says">
-    seccompは今でもcBPFを使っているけど、カーネル内部ではeBPFしか使ってないから、最初にeBPFに変換されるよ。それから、seccompにはBPFの検証器に加えて独自の検証機構があるよ。
+    The seccomp still uses cBPF, but it only uses eBPF inside the kernel, so it's converted to eBPF first. Then, seccomp has its own verification mechanism in addition to the BPF verifier.
   </p>
 </div>
 
-また、BPFプログラムとユーザー空間がやりとりするためには**BPFマップ**というものを使います。BPFではカーネル空間にマップという、key-valueペアの連想配列[^1]を作れます。これについての詳細は、実際にBPFプログラムを書く際に見ていきます。
+BPF also uses something called a **BPF map** to communicate between BPF programs and user space, and BPF allows you to create a map, an associative array of key-value pairs [^1], in kernel space. We'll look at this in more detail when we actually write the BPF program.
 
-[^1]: マップには種類が設定できますが、`BPF_MAP_TYPE_ARRAY`の場合、キーは整数値で上限も設定するので、ただの配列になります。
+[^1]: You can set the type of the map, but in the case of `BPF_MAP_TYPE_ARRAY`, the key is just an array since it is an integer value that also sets the upper limit.
 
-### BPFのアーキテクチャ
-より詳しくBPFの構造を見ていきましょう。cBPFは32ビットのアーキテクチャでしたが、eBPFでは近年のアーキテクチャに合わせて64ビットになり、レジスタの数も増えました。ここではeBPFのアーキテクチャを説明します。
+### BPF Architecture
+Let's look at the structure of the BPF in more detail. cBPF had a 32-bit architecture, but eBPF has a 64-bit architecture with more registers to match recent architectures. Here we explain the architecture of eBPF.
 
-#### レジスタとスタック
-BPFプログラムでは512バイトのスタックを利用できます。eBPFでは、以下のレジスタが用意されています。
+#### Registers and Stack
+The BPF program can use 512 bytes of stack. eBPF provides the following registers.
 
-| BPFレジスタ | 対応するx64のレジスタ |
+| BPF registers | Corresponding x64 registers |
 |:-:|:-:|
 | R0 | rax |
 | R1 | rdi |
@@ -72,50 +72,50 @@ BPFプログラムでは512バイトのスタックを利用できます。eBPF�
 | R9 | r15 |
 | R10 | rbp |
 
-`R10`以外のレジスタは、BPFプログラム中で汎用レジスタとして扱えますが、いくつか特殊な意味を持つレジスタがあります。
-まず、カーネル側から渡されるコンテキスト（ポインタ）が`R1`に入ります。BPFプログラムは通常、このコンテキストの内容を処理することになります。例えばソケットフィルタの場合、コンテキストからパケットデータを取り出すなどが可能です。
-そして、`R0`レジスタはBPFプログラムの戻り値として利用されます。そのため、BPFプログラムを終了（`BPF_EXIT_INSN`）する前に必ず`R0`に値を設定する必要があります。終了コードには意味があり、例えばseccompの場合はシステムコールを許可・拒否するかなどを表します。
-次に、`R1`から`R5`は、カーネル中の関数（後述するヘルパー関数）をBPFプログラムから呼び出すときの引数レジスタとして利用されます。
-最後に、`R10`はスタックのフレームポインタで、読み込み専用となっています。
+Registers other than `R10` can be treated as general-purpose registers in a BPF program, but there are a few registers that have special meanings.
+First, the context (pointer) passed from the kernel side goes into `R1`, and the BPF program will usually process the contents of this context. For example, a socket filter can retrieve packet data from the context.
+The `R0` register is then used as the return value of the BPF program. Therefore, you must always set a value in `R0` before exiting the BPF program (`BPF_EXIT_INSN`). The exit code has a meaning, for example, in the case of seccomp, it indicates whether system calls are allowed or denied.
+Next, `R1` through `R5` are used as argument registers for calling functions in the kernel (helper functions described below) from BPF programs.
+Finally, `R10` is the stack frame pointer and is read-only.
 
-#### 命令セット
-一般ユーザーがロードするBPFプログラムは、最大4096命令[^2]を使えます。
+#### Instruction Set
+BPF programs loaded by general users can use up to 4096 instructions [^2].
 
-[^2]: rootユーザーの場合、最大100万個の命令をロードできます。
+[^2]: For the root user, up to 1 million instructions can be loaded.
 
-BPFはRISC型のアーキテクチャなので、すべての命令は同じサイズになっています。各命令は64ビットで、次のように各ビットが意味を持ちます。
+Since BPF is a RISC type architecture, all instructions are the same size. Each instruction is 64 bits and each bit has a meaning as follows.
 
-| ビット | 名前 | 意味 |
+| bit | name | meaning |
 |:-:|:-:|:-:|
-| 0-7 | `op` | オペコード |
-| 8-11 | `dst_reg` | 宛先レジスタ |
-| 12-15 | `src_reg` | ソースレジスタ |
-| 16-31 | `off` | オフセット |
-| 32-63 | `imm` | 即値 |
+| 0-7 | `op` | Opcode |
+| 8-11 | `dst_reg` | Destination Register |
+| 12-15 | `src_reg` | Source Register |
+| 16-31 | `off` | Offset |
+| 32-63 | `imm` | Immediate |
 
-オペコード`op`は、最初の4ビットがコード、次の1ビットがソース、残りの3ビットがクラスを表します。
-クラスは命令の種類（メモリ書き込み、算術演算など）を指定します。ソースは、ソースオペランドがレジスタか即値かを決めます。そしてコードが、クラス中の具体的な命令番号を指定します。
+In the opcode `op`, the first 4 bits represent the code, the next 1 bit represents the source, and the remaining 3 bits represent the class.
+The class specifies the type of instruction (memory write, arithmetic operation, etc.). Source determines whether the source operand is a register or an immediate value. The code then specifies the specific instruction number in the class.
 
-BPFの命令セットは[Linuxカーネルのドキュメント](https://www.kernel.org/doc/html/latest/bpf/instruction-set.html)に記載されています。
+The BPF instruction set is described in [Linux kernel documentation](https://www.kernel.org/doc/html/latest/bpf/instruction-set.html).
 
-#### プログラムタイプ
-先の例で実際にBPFを試したときは、`BPF_PROG_TYPE_SOCKET_FILTER`というタイプを指定しました。このように、BPFプログラムを何の用途で使うかを、ロード時に指定する必要があります。
-cBPFではソケットフィルタとシステムコールフィルタの2種類しかありませんでしたが、eBPFでは20以上のタイプが用意されています。
+#### Program Type
+When we actually tried BPF in the previous example, we specified the type `BPF_PROG_TYPE_SOCKET_FILTER`. Thus, it is necessary to specify at load time what the BPF program is to be used for.
+In cBPF, there were only two types: socket filters and system call filters. eBPF provides more than 20 types.
 
-タイプ一覧は[uapi/linux/bpf.h](https://elixir.bootlin.com/linux/v5.18.10/source/include/uapi/linux/bpf.h#L922)に定義されています。
+The list of types is defined in [uapi/linux/bpf.h](https://elixir.bootlin.com/linux/v5.18.10/source/include/uapi/linux/bpf.h#L922).
 
-例えば、`BPF_PROG_TYPE_SOCKET_FILTER`は、cBPFでも使えるソケットフィルタの用途です。BPFプログラムの戻り値によって、パケットをドロップするなどの操作が可能です。このタイプのBPFプログラムは、`SO_ATTACH_BPF`オプションで`setsockopt`システムコールを呼ぶことで、ソケットにアタッチできます。
-コンテキストとして[`__sk_buff`構造体](https://elixir.bootlin.com/linux/v5.18.10/source/include/uapi/linux/bpf.h#L5543)が渡されます。
+For example, `BPF_PROG_TYPE_SOCKET_FILTER` is a use of socket filter that can be used in cBPF as well; the return value of the BPF program allows operations such as dropping packets. This type of BPF program can be attached to a socket by calling the `setsockopt` system call with the `SO_ATTACH_BPF` option.
+The [`__sk_buff` structure](https://elixir.bootlin.com/linux/v5.18.10/source/include/uapi/linux/bpf.h#L5543) is passed as context.
 
 <div class="balloon_l">
   <div class="faceicon"><img src="../img/wolf_suyasuya.png" alt="オオカミくん" ></div>
   <p class="says">
-    Linuxカーネルのsk_buff構造体をそのまま渡すとカーネルのバージョンに依存しちゃうから、BPF用に構造を揃えているよ。
+    If you pass the Linux kernel's sk_buff structure as is, it will depend on the kernel version, so I've aligned the structure for BPF.
   </p>
 </div>
 
-#### ヘルパー関数
-レジスタの項で少し説明があったように、BPFプログラムから呼び出せる関数があります。例えばソケットフィルタの場合、ベースとなるヘルパー関数に加えて[4つの関数が提供](https://elixir.bootlin.com/linux/v5.18.10/source/net/core/filter.c#L7637)されています。
+#### Helper Functions
+As explained briefly in the register section, there are functions that can be called from the BPF program. For example, in the case of the socket filter, [four functions are provided](https://elixir.bootlin.com/linux/v5.18.10/source/net/core/filter.c#L7637) in addition to the base helper functions.
 ```c
 static const struct bpf_func_proto *
 sk_filter_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
@@ -136,23 +136,24 @@ sk_filter_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	}
 }
 ```
-ベースとなるヘルパー関数には、BPFマップを扱う`map_lookup_elem`や`map_update_elem`などがあります。各関数の具体的な使い方は、実際にBPFプログラムを書きながら学びましょう。
+The base helper functions include `map_lookup_elem` and `map_update_elem`, which handle BPF maps. Let's learn how to use each function in concrete terms while actually writing BPF programs.
 
-## BPFの利用
-それでは、実際にBPF(eBPF)を利用してみましょう。
+## Using BPF
+Now, let's actually use BPF (eBPF).
 
-LK06のマシン上でテストする場合は問題ありませんが、みなさんの使っているマシンでテストする場合は、まずBPFが一般ユーザーから使えるかを確認してください。この記事を書いた時点では、Spectreなどのサイドチャネル攻撃の防止のため、一般ユーザーからはBPFが利用できなくなっています。有効かは`/proc/sys/kernel/unprivileged_bpf_disabled`から確認できます。
+If you are testing on the LK06 machine, there is no problem, but if you are testing on your own machine, first make sure that BPF can be used from a general user. At the time of writing this article, BPF is not available for general users to prevent side-channel attacks such as Spectre. You can check if it is enabled from `/proc/sys/kernel/unprivileged_bpf_disabled`.
+
 ```
 $ cat /proc/sys/kernel/unprivileged_bpf_disabled
 2
 ```
-この値が0なら`CAP_SYS_ADMIN`を持っていないユーザーからもBPFが利用できます。1か2になっている場合は、一時的に0に書き換えましょう。
+If this value is 0, BPF can be used by users who do not have `CAP_SYS_ADMIN`. 1 or 2, temporarily set it to 0.
 
-### BPFプログラムの記述
-パケットフィルタリングなどの複雑なコードを書く場合は、通常[BCC](https://github.com/iovisor/bcc)のようなコンパイラを使って、C言語などより高級な言語で記述します。今回はexploit目的に軽く使うだけなので、コンパイラを使わずにBPFバイトコードを直接記述しましょう。直接といってもバイトコードを16進数で書く訳ではありません。アセンブリ言語のように、人間にわかりやすい形で書けるC言語用のマクロが用意されています。
-まずは、このマクロが定義された[bpf\_insn.h](distfiles/bpf_insn.h)をダウンロードして、テスト用のCコードと同じフォルダに入れておきましょう。
+### Writing BPF programs
+When writing complex codes such as packet filtering, you usually use a compiler such as [BCC](https://github.com/iovisor/bcc) and write them in a higher-level language such as C. In this case, since we are only going to use it lightly for the purpose of exploit, let's write BPF bytecode directly without using a compiler. Directly does not mean that the bytecode is written in hexadecimal. There are macros available for the C language that can be written in a form that is easy for humans to understand, just like assembly language.
+First, download [bpf\_insn.h](distfiles/bpf_insn.h) in which this macro is defined and put it in the same folder as the C code for testing.
 
-まずは、何もしないBPFプログラムを実行してみます。
+First, run the BPF program, which does nothing.
 ```c
 #include <linux/bpf.h>
 #include <stdint.h>
@@ -176,13 +177,13 @@ int bpf(int cmd, union bpf_attr *attrs) {
 int main() {
   char verifier_log[0x10000];
 
-  /* BPFプログラムの用意 */
+  /* Prepare BPF program */
   struct bpf_insn insns[] = {
     BPF_MOV64_IMM(BPF_REG_0, 4),
     BPF_EXIT_INSN(),
   };
 
-  /* 使用用途を設定（ソケットのフィルター） */
+  /* Set usage (filter sockets) */
   union bpf_attr prog_attr = {
     .prog_type = BPF_PROG_TYPE_SOCKET_FILTER,
     .insn_cnt = sizeof(insns) / sizeof(insns[0]),
@@ -193,20 +194,20 @@ int main() {
     .log_buf = (uint64_t)verifier_log
   };
 
-  /* BPFプログラムをロード */
+  /* load BPF program */
   int progfd = bpf(BPF_PROG_LOAD, &prog_attr);
   if (progfd == -1) {
     fatal("bpf(BPF_PROG_LOAD)");
   }
 
-  /* ソケットを作成 */
+  /* Create Socket */
   int socks[2];
   if (socketpair(AF_UNIX, SOCK_DGRAM, 0, socks))
     fatal("socketpair");
   if (setsockopt(socks[0], SOL_SOCKET, SO_ATTACH_BPF, &progfd, sizeof(int)))
     fatal("setsockopt");
 
-  /* ソケットを利用（BPFプログラムの発動） */
+  /* Using the socket (triggering the BPF program) */
   write(socks[1], "Hello", 5);
 
   char buf[0x10] = {};
@@ -216,26 +217,27 @@ int main() {
   return 0;
 }
 ```
-このコードでは、ソケットに対してBPFプログラムをロード（`BPF_PROG_TYPE_SOCKET_FILTER`）します。そのため、最後の`write`をトリガーとして、BPFプログラムが実行されます。
+This code loads the BPF program (`BPF_PROG_TYPE_SOCKET_FILTER`) for the socket. Therefore, the last `write` triggers the BPF program to be executed.
 
-以下の部分がBPFプログラムになります。
+The following part is the BPF program.
 ```c
   struct bpf_insn insns[] = {
     BPF_MOV64_IMM(BPF_REG_0, 4),
     BPF_EXIT_INSN(),
   };
 ```
-この例では、R0に64ビットの即値4を代入し、プログラムを終了します。正常に動作した場合、"Hell"と出力されるはずです。
-レジスタについては後で詳しい説明がありますが、R0レジスタはBPFプログラムの戻り値として利用されます。今回`write`で5文字送信したにも関わらず4文字しか受信できていないのは、BPFがパケットをドロップしたからです。つまり、戻り値によって送信データをカットできるわけです。実際に、`socket`のマニュアルには次のように書かれています。
+In this example, R0 is assigned the immediate 64-bit value 4 and the program is terminated. If all went well, the output should read "Hell".
+The R0 register is used as the return value of the BPF program. In this case, the reason why only 4 characters are received even though 5 characters were sent with `write` is that the BPF dropped the packet. In other words, the return value allows us to cut off the sent data. In fact, the `socket` manual says
 
 > SO_ATTACH_FILTER (since Linux 2.2), SO_ATTACH_BPF (since Linux 3.19)
 >
 >    Attach a classic BPF (SO_ATTACH_FILTER) or an extended BPF (SO_ATTACH_BPF) program to the socket for use as a filter of incoming packets.  **A packet will be dropped if the filter program returns zero.  If the filter program returns a nonzero value which is less than the packet's data length, the packet will be truncated to the length returned.** If the value returned by the filter is greater than or equal to the packet's data length, the packet is allowed to proceed unmodified.
 
-### BPFマップの利用
-ここまでで、BPFを使ってパケットをフィルタリングできることを確かめました。
-次に、eBPFのexploitで必ずといって良いほど利用する、BPFマップを使ってみます。ユーザー空間（BPFプログラムをロードした側）と、カーネル空間で動くBPFプログラムがやりとりするために、BPFマップが利用されます。
-BPFマップを作るには、`BPF_MAP_CREATE`で`bpf`システムコールを呼びます。このとき渡す`bpf_attr`構造体は、タイプを`BPF_MAP_TYPE_ARRAY`にして、配列のサイズやキー・値のサイズを指定します。exploitの文脈ではキーは小さいて良いので、キーはint型として固定します。
+### Using the BPF Map
+Now that we have verified that we can filter packets using BPF, let's try to use the BPF map.
+Next, let's try to use the BPF map, which is always used in eBPF exploits. The BPF map is used to communicate between user space (where the BPF program is loaded) and the BPF program running in kernel space.
+To create a BPF map, call the `bpf` system call with `BPF_MAP_CREATE`. The `bpf_attr` structure that is passed in specifies the type `BPF_MAP_TYPE_ARRAY`, the size of the array and the size of the keys and values. in the context of exploit, the keys are fixed as int type, since keys can be small.
+
 ```c
 int map_create(int val_size, int max_entries) {
   union bpf_attr attr = {
@@ -249,7 +251,7 @@ int map_create(int val_size, int max_entries) {
   return mapfd;
 }
 ```
-配列中の値の更新は`BPF_MAP_UPDATE_ELEM`、取得は`BPF_MAP_LOOKUP_ELEM`で実現できます。
+Update values in the array with `BPF_MAP_UPDATE_ELEM` and retrieve with `BPF_MAP_LOOKUP_ELEM`.
 ```c
 int map_update(int mapfd, int key, void *pval) {
   union bpf_attr attr = {
@@ -273,7 +275,7 @@ int map_lookup(int mapfd, int key, void *pval) {
   return bpf(BPF_MAP_LOOKUP_ELEM, &attr); // -1 if not found
 }
 ```
-次のようなプログラムで動作を確認してみてください。マップの値を（ユーザー空間で）読み書きできていることが分かるでしょう。
+Try the following program to see how it works. You will see that you can read and write (in user space) the values of the map.
 ```c
   unsigned long val;
   int mapfd = map_create(sizeof(val), 4);
@@ -286,16 +288,16 @@ int map_lookup(int mapfd, int key, void *pval) {
   printf("0x%lx\n", val);
 ```
 
-さて、次にBPFマップをBPFプログラム側から操作してみます。
+Now, let's try to manipulate the BPF map from the BPF program side.
 ```c
-  /* BPFマップの用意 */
+  /* Prepare BPF map */
   unsigned long val;
   int mapfd = map_create(sizeof(val), 4);
 
   val = 0xdeadbeefcafebabe;
   map_update(mapfd, 1, &val);
 
-  /* BPFプログラムの用意 */
+  /* BPF Program Preparation */
   struct bpf_insn insns[] = {
     BPF_ST_MEM(BPF_DW, BPF_REG_FP, -0x08, 1),      // key=1
     BPF_ST_MEM(BPF_DW, BPF_REG_FP, -0x10, 0x1337), // val=0x1337
@@ -318,7 +320,7 @@ int map_lookup(int mapfd, int key, void *pval) {
 
 ...
 
-  /* ソケットを利用（BPFプログラムの発動） */
+  /* Using sockets (triggering BPF program) */
   map_lookup(mapfd, 1, &val);
   printf("val (before): 0x%lx\n", val);
 
@@ -327,24 +329,24 @@ int map_lookup(int mapfd, int key, void *pval) {
   map_lookup(mapfd, 1, &val);
   printf("val (after) : 0x%lx\n", val);
 ```
-このBPFプログラムは、`map_update_elem`ヘルパー関数を使って、BPFマップ中のキー1の値を0x1337に変更します。
-まず、`map_update_elem`にはキー・値ともにポインタを渡すので、メモリ上にキーと値を用意します。
+This BPF program uses the `map_update_elem` helper function to change the value of key 1 in the BPF map to 0x1337.
+First, prepare the key and value in memory, since both key and value are passed as pointers to `map_update_elem`.
 ```c
     BPF_ST_MEM(BPF_DW, BPF_REG_FP, -0x08, 1),      // key=1
     BPF_ST_MEM(BPF_DW, BPF_REG_FP, -0x10, 0x1337), // val=0x1337
 ```
-`BPF_REG_FP`は`R10`のことで、スタックポインタとなります。`BPF_ST_MEM`は、馴染みのあるx86-64アセンブリで書くと、次のようになります。
+`BPF_REG_FP` is `R10`, which is the stack pointer. `BPF_ST_MEM`, written in familiar x86-64 assembly, is
 ```
 mov dword [rsp-0x08], 1
 mov dword [rsp-0x10], 0x1337
 ```
-次に、引数を用意します。引数は`BPF_REG_ARG1`から順に入れますが、これは`R1`からのレジスタです。
-`map_update_elem`の第一引数はBPFマップのファイルディスクリプタです。`BPF_LD_MAP_FD`を使ってレジスタに代入できます。
+Next, prepare the arguments. The arguments are put in order from `BPF_REG_ARG1`, which is the register from `R1`.
+The first argument of `map_update_elem` is the file descriptor of the BPF map. It can be assigned to the register using `BPF_LD_MAP_FD`.
 ```c
     // arg1: mapfd
     BPF_LD_MAP_FD(BPF_REG_ARG1, mapfd),
 ```
-第二引数と第三引数は、それぞれキー、値へのポインタです。
+The second and third arguments are pointers to keys and values, respectively.
 ```c
     // arg2: key pointer
     BPF_MOV64_REG(BPF_REG_ARG2, BPF_REG_FP),
@@ -353,29 +355,29 @@ mov dword [rsp-0x10], 0x1337
     BPF_MOV64_REG(BPF_REG_ARG3, BPF_REG_2),
     BPF_ALU64_IMM(BPF_ADD, BPF_REG_ARG3, -8),
 ```
-第四引数はフラグですが、0を入れておきます。
+The fourth argument is a flag, which should be 0.
 ```
     // arg4: flags
     BPF_MOV64_IMM(BPF_REG_ARG4, 0),
 ```
-最後に`BPF_EMIT_CALL`を使ってヘルパー関数を呼び出せます。
+Finally, helper functions can be called using `BPF_EMIT_CALL`.
 ```c
     BPF_EMIT_CALL(BPF_FUNC_map_update_elem), // map_update_elem(mapfd, &k, &v)
 ```
-実行すると、BPFプログラムが発火する`write`命令前後でBPFマップ中のキー1の値が変化していることが分かります。
+Execution shows that the value of key 1 in the BPF map changes before and after the `write` instruction fired by the BPF program.
 ```
 $ ./a.out 
 val (before): 0xdeadbeefcafebabe
 val (after) : 0x1337
 ```
 
-ここまででBPFの基礎は終わりです。このように、BPFプログラミングでは、BPFマップやヘルパー関数を駆使してパケットフィルタなどが実装できます。
-次の章では、BPF関連の脆弱性でもっとも重要となる検証器のお話をします。
+This concludes the basics of BPF. As you can see, BPF programming allows you to implement packet filters and other functions by making full use of BPF maps and helper functions.
+In the next chapter, we will talk about the verifier, which is the most important BPF-related vulnerability.
 
 ---
 
-<div class="column" title="例題">
-  本章では、BPFプログラムからパケットを部分的にドロップしました。BPFプログラムから次の操作ができるかを調べ、可能な場合はBPFプログラムを書いてください。（ヒント：<code>skb_load_bytes</code>などのヘルパー関数を調べる。）<br>
-  (1) 送信データに"evil"という文字列が含まれていたらドロップする。<br>
-  (2) 送信データサイズが4バイト以上の場合、先頭4バイトを"evil"に変更する。
+<div class="column" title="Example">
+  In this chapter, we have partially dropped packets from the BPF program; find out if you can do the following using the BPF program, and if so, write a BPF program. (Hint: look up helper functions such as <code>skb_load_bytes</code>.)<br>
+  (1) If the string "evil" is included in the data to be sent, it is dropped.<br>
+  (2) If the size of data to be sent is 4 bytes or more, the first 4 bytes are changed to "evil".
 </div>
